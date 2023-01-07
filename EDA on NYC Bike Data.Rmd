@@ -1,0 +1,801 @@
+---
+title: "Exploratory Data Analysis on NYC Metropolitan Area"
+author: "Anusha Muddapati, Harshith Sesham, Deekshit Vedula, Tejeshwine Viswanathan, Loren Young"
+output: pdf_document
+fontsize: 10pt
+geometry: margin=1in
+---
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE, echo=FALSE)
+```
+
+```{r, echo=FALSE}
+
+
+library(knitr)
+library(RMySQL)
+library(stringr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggpubr)
+library(geosphere)
+library(sf)
+library(broom)
+library(sp)
+library(grid)
+library(stringr)
+library(lubridate)
+library(ggpubr)
+library(ggpmisc)
+library(tidyverse)
+library(forcats)
+library(gridExtra)
+library(RSQLite)
+library(jsonlite)
+library(gtable) 
+library(grid)
+library(latex2exp)
+library(gridBase)
+library(nnet)
+library(magrittr)
+library(geosphere)
+library(geodist)
+library(hms)
+library(corrplot)
+
+
+```
+
+
+## Introduction
+
+ 
+- This project analyzes the correlation and influences that weather has on public bicycling in the New York City (NYC) metropolitan area. 
+Using weather data taken from the National Oceanic and Atmospheric Administration (NOAA) for the month of January, 2022, these influences were examined on bicycle riders under the Citi BikeShare community. 
+
+- Through these BikeShare systems, a user can rent a bike from a particular station and return it at another station. Currently, there are about over 500 bike-sharing programs around the world. There exists great interest in these systems due to their important role in traffic, environmental and health issues.
+
+- Opposed to other transport services such as bus or subway, the duration of travel, departure and arrival position is explicitly recorded in these systems, which allows for extensive analysis. 
+
+- The following analysis allows for the understanding and interpretation of how weather impacts commuting via bicycle for a large American city in contemporary times, amidst the metropolitan hub of daily commuters.
+
+
+
+## Data
+
+- Citi BikeShare is a rental company which allows users to rent bicycles. A rider unlocks a bike and pays per time or distance that they use the bike. After a ride is ended at a designated BikeShare location, thus ending the ride, the data is recorded in the BikeShare database. 
+
+- Parameters recorded include the type of bike used, the start and end times, and the start and end geographical coordinates and the start and end stations.
+
+- The weather data includes the type of cloud cover, precipitation, and temperature for different times of day during the month of January, 2022. 
+
+- Both data-sets thus align in their respective time-frames, with the BikeShare data-set recording over one million events for the month. 
+
+```{r, eval=TRUE, echo=FALSE}
+
+
+nyc_bike_data <- read.csv("202201-citibike-NYC.csv")
+nyc_bike_data <- nyc_bike_data %>% drop_na()
+temp_data <- read.csv("DailyWeatherDataNYCJan2022.csv")
+
+```
+
+## Attributes of NYC Bike Data-Set
+
+```{r, echo=FALSE}
+
+knitr::kable(colnames(nyc_bike_data), col.names=c("Attributes of NYC Bike Data"))
+
+```
+## Attributes of NYC Weather Data-set
+
+```{r, echo=FALSE}
+knitr::kable(colnames(temp_data), col.names = c("Attributes of NYC Weather Data"))
+```
+
+
+## Analysis
+
+- The premise of the analysis is to understand the correlation between several weather variables and BikeShare riders for the NYC area. 
+
+- Several weather related parameters were plotted against the types of bikes and number of riders for each day of the month. 
+
+- Regression analysis was employed to determine the correlations between parameters in the two data-sets to observe trends in the data. 
+
+
+
+## Results
+
+This is an accumulation of our data analysis done with the attributes of both the aforementioned data-sets.
+
+```{r, echo=FALSE, fig.height=8, fig.width=12}
+
+# insert code for plots here
+started_at <- nyc_bike_data$started_at
+ended_at <- nyc_bike_data$ended_at
+          
+started_at_df <- as.data.frame(started_at)
+ended_at_df <- as.data.frame(ended_at)
+          
+started_at_date <- as.Date(nyc_bike_data$started_at, format="%Y-%m-%d")
+ended_at_date <- as.Date(nyc_bike_data$ended_at, format="%Y-%m-%d")
+          
+nyc_bike_data$started_at_date <- started_at_date
+nyc_bike_data$ended_at_date <- ended_at_date
+
+no_of_bikes <- count(nyc_bike_data %>% group_by(started_at_date))
+          
+dates <- format(as.Date(temp_data$datetime, format="%Y-%m-%d"))
+          
+temp <- temp_data$temp
+min_temp <- temp_data$tempmin
+max_temp <- temp_data$tempmax
+
+# line plot member and casual
+member_casual_counts <- count(nyc_bike_data %>% 
+                              group_by(started_at_date, member_casual))
+ggplot(member_casual_counts, aes(x=started_at_date, y=n, group=member_casual)) +
+       geom_line(aes(color=member_casual)) +
+       geom_point(aes(color=member_casual)) +
+       ggtitle("Line graph of number of bikes") + 
+  theme(plot.title = element_text(hjust=0.5, size=15, face='bold'))+ xlab("Date") +ylab("Number of bikes")
+```
+
+- The above graph shows the number of bikes being rented on each day of the month by membership. 
+- The number of people renting bikes with a membership out-weigh the people renting them casually. 
+- This helps in setting up the initial analysis of the data. Subsequent analysis can take place after understand the data structure and division.
+
+```{r, echo=FALSE,  fig.height=5, fig.width=10}
+
+# Number of bikes by member type (bar)
+member_casual_count <- count(nyc_bike_data %>% group_by(started_at_date, member_casual))
+ggplot(data=member_casual_count, aes(x=started_at_date, y=n, fill=member_casual))+
+       geom_bar(stat='identity') + xlab("Date") + ylab("Number of bikes") +
+       labs(title="Number of bikes by member type")+ 
+  theme(plot.title = element_text(hjust=0.5, size=15, face='bold'))
+
+
+```
+
+- This can also be visualized in the form of a bar plot above.
+
+
+
+```{r, echo=FALSE,  fig.height=7, fig.width=12}
+
+# Number of bikes by membership (box)
+ggplot(member_casual_counts, aes(x=member_casual, y=n, fill=member_casual)) +
+       geom_boxplot(alpha=0.8) +
+       theme(legend.position = "none") + ggtitle("Box plot of bike membership") +
+       xlab("") + ylab("Number of bikes")+ 
+  theme(plot.title = element_text(hjust=0.5, size=15, face='bold'))
+
+
+```
+
+- The box plot below shows the spread of the number of bikes rented based on membership. On an average only 5,000 bikes were rented by casual customers while 30,000 bikes were rented by members. 
+- This information is helpful in stocking the bikes so that preference can be given to members until the bikes rented by members crosses 30,000.
+
+
+
+```{r, echo=FALSE, fig.height=9, fig.width=15}
+
+stations_count <- count(nyc_bike_data %>% group_by(start_station_name))
+top_5_stations <- stations_count[order(-stations_count$n),][1:5,]$start_station_name
+          
+top_5_stations_performance <- nyc_bike_data %>% 
+                                group_by(started_at_date, start_station_name) %>%
+                                filter(start_station_name %in% top_5_stations)
+          
+plot <- ggplot(top_5_stations_performance) +
+               aes(x=started_at_date, fill=start_station_name) + geom_bar() +
+               ggtitle("Top 5 stations' performance") +
+               ylab("Number of bikes") + xlab("Date")+ 
+  theme(plot.title = element_text(hjust=0.5, size=15, face='bold'))
+          
+plot <- plot +
+          facet_wrap(~start_station_name, ncol=3, scales="free") +
+          theme(legend.position = "none")
+          
+plot
+
+```
+
+- There are total of more than 1500+ bike stations run by Citi Bike in NYC. The top 5 best performing stations can be seen above, all of which rent 100 bikes on an average everyday and can expect more during the weekdays.
+
+
+
+
+```{r, echo=FALSE, fig.height=5, fig.width=12}
+# Number of bikes with Temperature
+plot(no_of_bikes$started_at_date, no_of_bikes$n, type="l", lty=1,
+     lwd=2, col=3, main="Number of Bikes with Temperature", 
+     xlab="Date", ylab="Number of bikes")
+axis(side=2, col=3)
+          
+par(new=TRUE)
+          
+plot(no_of_bikes$started_at_date, temp, type="l", col = 6, 
+     axes = FALSE, xlab = "", ylab = "")
+arrows(x0=no_of_bikes$started_at_date, y0=min_temp, 
+       x1=no_of_bikes$started_at_date, y1=max_temp, code=3, angle=90, 
+       length=0.05, col="blue", lwd=0.2)
+axis(side = 4, at = pretty(range(temp)), col=6)
+mtext("Temperature", side=4)
+
+```
+
+- The correlation between the number of riders per day and temperature is not extremely strong. 
+- But a general trend can be spotted where during high and low temperatures the number of riders seems to have reduced most of the time which can be expected. 
+- The above graph shows the temperature fluctuation (with max and min) and the number of bikes rented on a particular day.
+
+
+
+```{r, echo=FALSE, fig.height=5, fig.width=12}
+
+# Number of bikes vs precipitation
+total_bike_counts_and_weather <- count(nyc_bike_data %>% 
+                                       group_by(started_at_date))
+precipitation_data <- temp_data$precip
+total_bike_counts_and_weather$precip <- precipitation_data
+          
+plot(total_bike_counts_and_weather$started_at_date, total_bike_counts_and_weather$n, type="l", lty=1,
+     lwd=2, col=3, main="Number of Bikes with Precipitation", 
+     xlab="Date", ylab="Number of bikes")
+axis(side=2, col=3)
+                                                  
+par(new=TRUE)
+          
+plot(total_bike_counts_and_weather$started_at_date, total_bike_counts_and_weather$precip, 
+     type="l", col = 5, 
+     axes = FALSE, xlab = "", ylab = "")
+axis(side = 4, at = pretty(range(total_bike_counts_and_weather$precip)), col=5)
+mtext("Precipitation", side=4)
+
+```
+
+- The correlation between the number of bikes rented and precipitation is mostly sporadic.
+- A very weak correlation can be observed when the precipitation increases the number of rides reduces in most of the cases.
+
+
+
+
+```{r, echo=FALSE, fig.height=6, fig.width=12}
+
+# Box plot for number of rides by type of weather
+# total_bike_counts_and_weather <- count(nyc_bike_data %>% 
+#                                        group_by(started_at_date))
+#           
+total_bike_counts_and_weather$temp <- temp
+          
+          
+icon_data <- temp_data$icon
+          
+total_bike_counts_and_weather$icon <- icon_data
+          
+ggplot(total_bike_counts_and_weather, aes(x=icon, y=n, fill=icon)) +
+       geom_boxplot(alpha=0.8) +
+       theme(legend.position = "none") + ggtitle("Number of bikes based on weather type") +
+       xlab("") + ylab("Number of bikes")+ 
+  theme(plot.title = element_text(hjust=0.5, size=15, face='bold'))
+
+```
+
+- The above graph shows the box plot of the number of bikes rented and the type of weather on a particular day. 
+- As can be seen here not a lot of bikes seem to have been rented when the weather is cloudy but only 1 day had a cloudy forecast in NYC in Jan 2022. 
+- So the only a few bikes would fall in that category in this graph.
+
+
+
+```{r, echo=FALSE, fig.height=6, fig.width=12}
+
+# Density plot of distance travelled by membership
+
+distance_travelled_data <- nyc_bike_data %>%
+  mutate(distance_travelled = distHaversine(cbind(start_lat, start_lng), cbind(end_lat, end_lng))) %>%
+  select(started_at_date, ended_at_date, member_casual, distance_travelled) %>% drop_na()
+distance_travelled_data$distance_travelled <- distance_travelled_data$distance_travelled/1000
+
+ggplot(distance_travelled_data, aes(x=distance_travelled, fill=member_casual)) +
+       geom_density(alpha=0.3) + xlab("Distance travelled") + ylab("Density") + 
+       ggtitle("Density plot of distances travelled")+ 
+  theme(plot.title = element_text(hjust=0.5, size=15, face='bold'))
+
+```
+
+
+
+- The density plot can also be seen for both casual and member riders and both of these plots seem to follow a very similar trend. The distances are calculated using the Haversian formula which assumes that the Earth is a perfect sphere. This would not effect the distances calculated at all because the deviation of curvature of NYC would be negligible from a perfect sphere for such a small area. 
+
+```{r, echo=FALSE, fig.height=7, fig.width=12}
+
+# Avg and Total Distance travelled
+mean_distance_travelled_by_date <- aggregate(distance_travelled_data$distance_travelled, 
+                                                  list(distance_travelled_data$started_at_date), FUN=mean)
+          
+          
+          
+max_distance_travlled_by_date <- aggregate(distance_travelled_data$distance_travelled, 
+                                                     list(distance_travelled_data$started_at_date), FUN=max)
+          
+           
+avg_co2_emission_per_km = 0.255 # in kgs
+          
+total_distance_travelled_by_date <- aggregate(distance_travelled_data$distance_travelled, 
+                                                    list(distance_travelled_data$started_at_date), FUN=sum)
+
+co2_reduction_per_day <- total_distance_travelled_by_date$x * 0.255
+          
+distance_data_by_date <- as.data.frame(mean_distance_travelled_by_date$Group.1)
+colnames(distance_data_by_date)[1] <- "Dates"
+          
+distance_data_by_date$mean_dist <- mean_distance_travelled_by_date$x
+distance_data_by_date$max_dist <- max_distance_travlled_by_date$x
+distance_data_by_date$total_dist <- total_distance_travelled_by_date$x
+distance_data_by_date$total_co2_reduction <- co2_reduction_per_day
+          
+p1 <- ggplot(data=distance_data_by_date, aes(x=Dates, y=mean_dist)) +
+            geom_line(color="darkred") + xlab("Date") + ylab("Average Distance travelled in kms") +
+            ggtitle("Avg Distance traveled")+ 
+  theme(plot.title = element_text(hjust=0.5, size=15, face='bold'))
+          
+p2 <- ggplot(data=distance_data_by_date, aes(x=Dates, y=max_dist)) +
+            geom_line(color="steelblue") + xlab("Date") + ylab("Maximum Distance traveled in kms") +
+            ggtitle("Max Distance traveled")+ 
+  theme(plot.title = element_text(hjust=0.5, size=15, face='bold'))
+          
+ggarrange(p1, p2, nrow = 1)
+
+
+```
+
+
+- The above plots show the average distance travelled by riders which is 1-1.5 Kms as seen in the density plots before and the maximum distance travelled by rider on each day.
+
+
+
+```{r, echo=FALSE, fig.height=5, fig.width=12}
+
+# Avg CO2 emission reduced
+ggplot(data=distance_data_by_date, aes(x=Dates, y=total_co2_reduction)) +
+            geom_bar(stat="identity", fill="steelblue") + 
+            xlab("Date") + ylab("Average CO2 emisison reduced in Kgs") +
+            ggtitle("Average CO2 emission reduced")+ 
+  theme(plot.title = element_text(hjust=0.5, size=15, face='bold'))
+
+```
+
+
+- An estimated amount of 255 gms of CO2 is released for every Km travelled by an average car. The below graph shows the average amount of CO2 emission reduced in Kgs on each day by Citi Bike customers.
+
+```{r, echo=FALSE}
+
+bike_data <- read.csv("202201-citibike-NYC.csv")
+weather_data <- read.csv("DailyWeatherDataNYCJan2022.csv")
+starting_time <- format(as.POSIXct(bike_data$started_at), format = "%H:%M:%S")
+tod <- cut(chron::times(starting_time) , breaks = (1/24) * c(0,5,11,16,19,24))
+bike_data$part_of_day <- c("Night","Morning","Day","Evening","Night")[as.numeric(tod)]
+
+```
+
+```{r, echo=FALSE}
+
+#Duration of ride and converting the date column to datetime
+bike_data$duration_of_ride <- difftime(bike_data$ended_at,bike_data$started_at, 
+                                       units = 'hours')
+bike_data <- bike_data %>% rename(datetime = started_at)
+bike_data$datetime <- as.Date(bike_data$datetime)
+
+# total num hours per day:
+total_hours_per_day <- bike_data %>% group_by(as.Date(datetime)) %>% 
+  summarize(num_hours = sum(duration_of_ride))
+
+weather_data$duration <- total_hours_per_day$num_hours
+#weather_data %>% select(datetime, duration)
+#weekdays of dates
+weather_data$weekdays <- wday(weather_data$datetime, label=TRUE, abbr=FALSE)
+
+#num of rides per day and rename columns to have apt names
+riders_per_day <- bike_data %>% group_by(as.Date(bike_data$datetime)) %>% count()
+
+riders_per_day <- riders_per_day %>% rename(date_of_ride = `as.Date(bike_data$datetime)`,
+                          num_riders = n )
+
+
+
+```
+
+```{r, echo=FALSE}
+#combining both datasets
+weather_data$datetime <- as.Date(weather_data$datetime)
+joint_dataset <- inner_join(bike_data, weather_data, by = 'datetime')
+
+joint_dataset[is.na(joint_dataset$part_of_day),]$part_of_day <- 'Night'
+
+temperatureColor <- "#cc9900"
+priceColor <- "#CC3333"
+
+```
+
+
+
+```{r, echo=FALSE, fig.height=6, fig.width=12}
+#LINEAR REGRESSION PLOT
+
+ggplot() +aes(weather_data$temp, riders_per_day$num_riders) +
+  geom_point(color = 'red', size = 3) +
+  geom_smooth(method='lm', color = 'darkgreen') +
+  stat_regline_equation(label.x.npc = "middle")+
+  stat_fit_glance(method = 'lm',
+                       geom = 'text',
+                       aes(label = paste("P-value = ", signif(..p.value.., digits = 4), sep = "")),
+                  label.x.npc = 'right', label.y.npc = 0.65, size = 3)+
+  labs(y='Number of rides per day', x='Temperature', title='Linear Regression of Number of rides per day Vs Temperature on that day') +
+  theme(plot.title = element_text(hjust=0.5, size=15, face='bold'))
+ # theme_bw()
+
+
+```
+
+- A Linear regression model is used to understand the relationships between the biker  density in various weather conditions. 
+- Among all the weather conditions, temperature is most highly associated with the number of rides per day. 
+- This is evident from the p-value obtained for this model, which is 0.013 and is lesser than the significance level. 
+- This indicates that there is a good amount of association between these two variables. 
+- Also, the regression line fits almost half of the data points which lie within the confidence intervals.
+
+
+```{r, echo=FALSE}
+
+
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73",
+"#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+theme1 <- theme_bw() +
+theme(axis.text = element_text(size = 10, colour = "#003300"),
+axis.title = element_text(size = 15, colour = "brown"),
+legend.title = element_text(size = 15, colour = "#660000"),
+legend.text = element_text(size = 13, colour = "darkred"),
+title = element_text(size = 15, colour = "#2f2f63"),
+axis.ticks = element_line(colour = "#6b3447"),
+plot.caption = element_text(size = 10, colour = "#2f2f63"),
+plot.subtitle = element_text(size = 10, colour = "#2f2f63"))
+
+
+```
+```{r}
+joint_dataset[joint_dataset$conditions == "Snow, Rain, Freezing Drizzle/Freezing Rain, Partially cloudy",]$conditions <- "Freezing Drizzle/Freezing Rain"
+legend_title = "Membership status"
+
+
+```
+
+
+
+```{r fig.alig="center",fig.height=13, fig.width=12, echo = FALSE}
+
+weather_data$average_duration <- weather_data$duration/riders_per_day$num_riders
+
+ggplot(weather_data) + aes(x = datetime) +
+    geom_point(aes(y = average_duration*60), size=5, color="red") + 
+  geom_line(aes(y = average_duration*60), color="red") + 
+  geom_line(aes(y = temp), color = "blue") +
+  geom_point(aes(y = temp), size=4, color="blue") + scale_y_continuous(
+    name = "Average duration(mins) ridden daily",
+    sec.axis = sec_axis(~., name="Temperature")
+  ) +
+  theme1 + 
+  facet_wrap(~ weekdays, ncol=3, scales="free" )  + 
+  theme(strip.text.x = element_text(size = 10)) +
+  theme(axis.text.x = element_text(angle=90, hjust=1,size=10)) +
+  theme(axis.text.y = element_text(size=10)) + 
+  theme(axis.title=element_text(size=15)) +
+  theme(plot.title=element_text(size=15)) +
+  scale_fill_manual(values =cbPalette, legend_title) +
+  theme(
+    axis.title.y = element_text(color = "red", size=15),
+    axis.title.y.right = element_text(color = "blue", size=15),
+    axis.title.x =  element_text()
+   # axis.text.x = element_text(angle = 90)
+  ) +
+  labs(x = "Date") +
+  scale_x_date(date_labels="%d %b",date_breaks  ="1 day") +
+  ggtitle("Average duration of rides daily against Temperature across Weekdays")+ 
+  theme(plot.title = element_text(hjust=0.5, size=15, face='bold'))
+
+
+```
+
+
+- This plot shows the average duration of bike rides on a daily basis across weekdays
+and their trends w.r.t temperature. 
+- The red line shows the avg duration in mins each day and the blue line is the temperature on that day. 
+- We observe a similar trend during the week  as opposed to weekends, i.e., all the 5 days from Monday to Friday across the 4 weeks in January have a similar trend in the average trip duration. 
+- We notice that there is a decent amount of correlation between these two variables.
+
+```{r, echo=FALSE}
+sorted_riders_per_day <- riders_per_day[order(riders_per_day$date_of_ride),]
+
+weather_data_sorted <- weather_data[order(as.Date(weather_data$datetime)),]
+
+
+
+
+```
+
+
+```{r fig.alig="center",fig.height=12, fig.width=10, echo = FALSE}
+
+#Part of day vs weekdays 
+# head(joint_dataset)
+# names(joint_dataset)
+# joint_dataset %>% group_by(part_of_day) %>% count()
+
+ggplot(joint_dataset) +
+    geom_bar(position = "dodge", aes(x = part_of_day, fill = member_casual)) + 
+  theme1 + 
+  facet_wrap(~ weekdays,ncol=3, scales="free" )  + 
+  theme(strip.text.x = element_text(size =8)) +
+  theme(axis.text.x = element_text(angle=90, hjust=1,size=8)) +
+  theme(axis.text.y = element_text(size=8)) + 
+  theme(axis.title=element_text(size=15)) +
+  theme(plot.title=element_text(size=15)) +
+  labs(title="Number of Riders by Membership status and Part of day
+       Based on Weekdays",
+       x="Part of day",y="Number of riders") + 
+  scale_fill_manual(values =cbPalette, legend_title)
+
+```
+
+
+- This plot shows the number of rides varying w.r.t the time of day, i.e., morning, evening, day and night. It is evident that members of the Citibike rental system are the ones who had the maximum rides compared to non-members throughout the month of January.
+- These numbers are high during the week probably because the members  consider the rental system as their common mode of commute.
+
+
+
+```{r, echo=FALSE}
+
+
+
+nyc_bike <- read.csv("202201-citibike-NYC.csv") %>% data.frame()
+nyc_weather <-read.csv("DailyWeatherDataNYCJan2022.csv") %>% 
+  data.frame()
+
+```
+
+
+```{r, echo=FALSE}
+#Finding time duration by finding start and end time and the difference of the two
+nyc_bike$started_at %>% str_sub(12,19) %>% as_hms()-> nyc_bike$time_start
+nyc_bike$ended_at %>% str_sub(12,19) %>% as_hms() -> nyc_bike$time_end
+nyc_bike$duration <- round(nyc_bike$time_end-nyc_bike$time_start,3)
+
+#converting duration from seconds to hours to store in duration_hours
+nyc_bike$duration %>% as.numeric() ->nyc_bike$duration_hours
+nyc_bike$duration_hours <- round(nyc_bike$duration_hours/3600,5)
+###################################################################
+#fixing weekdays to each of the days by extracting date
+nyc_bike$started_at %>% str_sub(1,10) -> nyc_bike$datetime
+nyc_bike$weekday <- weekdays(as.Date(nyc_bike$datetime))
+#drop na values
+nyc_bike %>% drop_na() -> nyc_bike
+
+
+
+#Merge the nyc_bike and nyc_weather data as nyc
+nyc_bike %>% merge(nyc_weather,by="datetime") %>%  
+  as.data.frame()-> nyc
+#calculate count of bikers per day as "n"
+nyc %>% count(datetime) -> cnt
+nyc %>% right_join(cnt,by=c("datetime")) %>% 
+  as.data.frame() ->nyc
+
+
+#Calculate the distance traveled and speed in mph.
+
+nyc$dist_miles <- geodist_vec(
+  x1 = nyc$start_lng
+  , y1 = nyc$start_lat
+  , x2 = nyc$end_lng
+  , y2 = nyc$end_lat
+  , paired = TRUE
+  , measure = "haversine"
+)
+#convert distance from meters to miles
+nyc %>% transmute(dist_miles=dist_miles/1609) %>% round(5)-> nyc$dist_miles
+
+#calculate speed mph
+nyc$speed_mph <- round(nyc$dist_miles/nyc$duration_hours,5)
+nyc %>% filter(duration_hours>0) -> nyc
+
+```
+
+
+```{r, echo=FALSE}
+#FIND AVG SPEED and all avg weather conditions
+#speed
+rm(mean)
+aggregate(unlist(speed_mph)~datetime, nyc, FUN=mean) %>% 
+  as.data.frame() -> avg_speed
+#temp
+aggregate(temp~datetime,nyc,FUN=mean) %>% 
+  as.data.frame() -> avg_temp
+#precip
+aggregate(precip~datetime,nyc,FUN=mean) %>% 
+  as.data.frame() -> avg_precip
+#humidity
+aggregate(humidity~datetime,nyc,FUN=mean) %>% 
+  as.data.frame() -> avg_humidity
+#windspeed
+aggregate(windspeed~datetime,nyc,FUN=mean) %>% 
+  as.data.frame() -> avg_windspeed
+#sealevelpressure
+aggregate(sealevelpressure~datetime,nyc,FUN=mean) %>% 
+  as.data.frame() -> avg_sealevelpressure
+#cloudcover
+aggregate(cloudcover~datetime,nyc,FUN=mean) %>% 
+  as.data.frame() -> avg_cloudcover
+#solarradiation
+aggregate(solarradiation~datetime,nyc,FUN=mean) %>% 
+  as.data.frame() -> avg_solarradiation
+#visibility
+aggregate(visibility~datetime,nyc,FUN=mean) %>% 
+  as.data.frame() -> avg_visibility
+
+#rename columns
+avg_speed$speed <- avg_speed$`unlist(speed_mph)`
+avg_speed = subset(avg_speed, select = -c(`unlist(speed_mph)`) )
+
+
+#Join avg speed with all the avg weather conditions
+avg_speed %>% inner_join(avg_temp,by="datetime") %>% 
+  as.data.frame() %>% inner_join(avg_precip,by="datetime") %>% 
+  as.data.frame() %>% inner_join(avg_humidity,by="datetime")%>% 
+  as.data.frame() %>% inner_join(avg_windspeed,by="datetime")%>% 
+  as.data.frame() %>% inner_join(avg_sealevelpressure,by="datetime")%>% 
+  as.data.frame() %>% inner_join(avg_cloudcover,by="datetime")%>% 
+  as.data.frame() %>% inner_join(avg_solarradiation,by="datetime")%>% 
+  as.data.frame() %>% inner_join(avg_visibility,by="datetime")-> avg_speed
+
+avg_speed$weekday <- weekdays(as.Date(avg_speed$datetime))
+#View(avg_speed)
+
+#DO THE FREAKIN PLOTS!!!!!!!!!!
+
+drop <- c("datetime","weekday")
+avg_speed_subset <-  avg_speed[,!(names(avg_speed) %in% drop)]
+#View(avg_speed_subset)
+
+
+```
+
+
+
+
+```{r, echo=FALSE, fig.height=8, fig.width=10}
+#CORRELATION PLOT
+title="Correlation of speed against all weather conditions"
+M=cor(avg_speed_subset)
+corrplot(M, method = 'square', order = 'FPC', type = 'lower', 
+         tl.col = "black", diag = FALSE, title=title)
+
+
+```
+
+- This is a correlation plot which shows that speed is positively correlated with temperature. 
+- This indicates that a higher speed is associated with a higher temperature value. On the contrary, it also indicates a lower speed associated with a lower precipitation which indicates positive correlation. 
+- The correlation will increase if the data is extrapolated for more than a month's worth of data (over the course of the whole year). 
+- More significant statistical conclusions can be made with regard to speed against the weather attributes for a data-set collected over a longer duration of time.
+
+
+```{r, echo=FALSE, fig.height=8, fig.width=12}
+#TEMP VS SPEED ACC TO PRECIP
+tempvsspeed <- avg_speed %>% 
+  ggplot(aes(x = speed, 
+             y = temp,color=precip)) +
+  geom_point(show.legend = TRUE, size =3) +
+  facet_grid(~weekday) +
+  theme(axis.title = element_text()) +
+  ylab("Temperature (°F)") +
+  xlab("Speed (mph)") +
+  ggtitle("Speed By Temperature")+
+  theme(plot.title=element_text(hjust=0.5))+
+  theme(axis.text.x = element_text(face="bold", size=8, angle = 45),
+        axis.text.y = element_text(face="bold", size=8))+ 
+  theme(plot.title = element_text(hjust=0.5, size=15, face='bold'))
+tempvsspeed
+
+
+
+```
+
+- This is a plot which displays the temperature vs average speed for the day, with precipitation as the colour coded values.
+- This shows outliers during the weekend which indicates that despite a higher temperature value, riders tend to venture out during the weekends as opposed to weekdays. 
+- Higher precipitation levels seem indicative of higher speed which denotes that there is a positive correlation between the two, which can be seen in the previous correlation plot as well.
+
+## KILLER PLOT
+
+- This shows our "killer plot" in a grid format. Our killer plot analyzes biker density and average speed of bikers per day against the top 3 weather parameters.
+1. temperature
+2. visibility
+3. precipitation
+- The speed had to be calculated using the start and end latitudes and longitudes. 
+- The haversian distance was calculated and the timestamps were extracted and formatted to give rise to the duration of the trip. Using this, average speed was calculated and plotted against the weather parameters with the highest correlation.
+
+
+
+```{r, echo=FALSE}
+#SPEED VS ALL CONDITIONS
+
+
+drop <- c("datetime","solarradiation","sealevelpressure","humidity","windspeed","cloudcover")
+avg_speed_subset2 <-  avg_speed[,!(names(avg_speed) %in% drop)]
+
+
+grid1 <- avg_speed_subset2 %>%
+  gather(-speed, -weekday, key = "var", value = "value") %>%
+  ggplot(aes(x = value, y = speed, color = weekday)) +
+  geom_point(size = 3) +
+  facet_wrap(~ var, scales = "free") +
+  theme_bw()+
+  theme(axis.title = element_text()) +
+  xlab("Different weather conditions") +
+  ylab("Average Speed of bikers (mph)") +
+  ggtitle("Impact of Weather conditions on average speed")+
+  theme(plot.title = element_text(face = "bold",hjust = 0.5,color="grey20", size=15))
+
+
+
+```
+
+```{r, echo=FALSE}
+#NUMBER OF BIKERS AGAINST WEATHER
+aggregate(n~datetime, nyc, FUN=mean) %>% 
+  as.data.frame() -> cnt
+cnt %>% inner_join(avg_temp,by="datetime") %>% 
+  as.data.frame() %>% inner_join(avg_precip,by="datetime") %>% 
+  as.data.frame() %>% inner_join(avg_visibility,by="datetime")-> cnt
+
+cnt$weekday <- weekdays(as.Date(cnt$datetime))
+
+
+```
+
+```{r, echo=FALSE}
+drop <- c("datetime")
+cnt <-  cnt[,!(names(cnt) %in% drop)]
+grid2 <- cnt %>%
+  gather(-n, -weekday, key = "var", value = "value") %>% 
+  ggplot(aes(x = value, y = n, color = weekday)) +
+  geom_point(size = 3) +
+  facet_wrap(~ var, scales = "free") +
+  theme_bw()+
+  theme(axis.title = element_text()) +
+  xlab("Different weather conditions") +
+  ylab("Number of bikers") +
+  ggtitle("Impact of Weather conditions on biker density")+
+  theme(plot.title = element_text(face = "bold",hjust = 0.5,color="grey20", size=15))
+
+
+```
+
+
+
+```{r, echo=FALSE, fig.height=10, fig.width=12}
+pushViewport(viewport(layout=grid.layout(2, 1)))
+print(grid1, vp = viewport(layout.pos.row = 1,
+                       layout.pos.col = 1))
+print(grid2, vp = viewport(layout.pos.row = 2,
+                       layout.pos.col = 1))
+```
+
+
+## Conclusions
+
+- Throughout the analysis, regardless of membership status for CitiBike Share, riders continued to ride in substantial amounts and frequency during average weather conditions. Weather and riders per day did seem to align with temperature in that as temperature rose or fell, the number of riders decreased. 
+
+- However, riders typically rode in uncorrelated fashion when compared to different forms of cloud cover as more riders tended to be active during partly cloudy weather rather than on clear days as expected, with the least number of riders occurring under harsher conditions like rain and snowfall. 
+
+- Bike traffic across the city also tended to align between different streets and areas of NYC and throughout the month of January. Categorized based on time of day, mornings saw increased activity across the week regardless of weather for both members and non-members on weekdays.
+
+- Even for a large metropolitan area such as NYC, certain key weather conditions have observable effects on how many riders participate in the BikeShare community.
+
